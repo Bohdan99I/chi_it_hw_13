@@ -1,43 +1,29 @@
 import { Get, Param, Post, Body, JsonController, Patch, Delete } from 'routing-controllers';
 import { ValidateArgs } from '../decorators/validator';
-import fs from 'fs';
-
-interface User {
-    id: number;
-    user: string;
-    email: string;
-}
-
-const USERS_FILE = './src/users.json';
-
-const readUsersFromFile = (): User[] => {
-    if (!fs.existsSync(USERS_FILE)) {
-        return [];
-    }
-    const data = fs.readFileSync(USERS_FILE, 'utf-8');
-    return JSON.parse(data);
-};
-
-const writeUsersToFile = (users: User[]) => {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-};
+import { UserService } from '../services/UserService';
+import { User } from '../entities/User';
 
 @JsonController()
 export class UserController {
+    private userService: UserService;
+
+    constructor() {
+        this.userService = new UserService();
+    }
+
     @Get('/')
     getAuthor() {
         return { author: "Your Name" };
     }
 
     @Get('/users')
-    getAll() {
-        return readUsersFromFile();
+    async getAll() {
+        return await this.userService.findAll();
     }
 
     @Get('/users/:id')
-    getOne(@Param('id') id: number) {
-        const users = readUsersFromFile();
-        const user = users.find((u) => u.id === id);
+    async getOne(@Param('id') id: string) {
+        const user = await this.userService.findOne(id);
         if (!user) {
             return { message: `User with ID ${id} not found` };
         }
@@ -46,43 +32,40 @@ export class UserController {
 
     @Post('/users')
     @ValidateArgs('create')
-    create(@Body() userData: Partial<User>) {
-        const users = readUsersFromFile();
-        const newUser = {
-            id: users.length + 1,
-            ...userData,
-        } as User;
-        users.push(newUser);
-        writeUsersToFile(users);
-        return { message: 'User created', user: newUser };
+    async create(@Body() userData: Partial<User>) {
+        try {
+            const user = await this.userService.create(userData);
+            return { message: 'User created', user };
+        } catch (error) {
+            return { message: 'Error creating user', error: (error as Error).message };
+        }
     }
 
     @Patch('/users/:id')
     @ValidateArgs('update')
-    update(@Param('id') id: number, @Body() userData: Partial<User>) {
-        const users = readUsersFromFile();
-        const userIndex = users.findIndex((u) => u.id === id);
-        if (userIndex === -1) {
-            return { message: `User with ID ${id} not found` };
+    async update(@Param('id') id: string, @Body() userData: Partial<User>) {
+        try {
+            const user = await this.userService.update(id, userData);
+            if (!user) {
+                return { message: `User with ID ${id} not found` };
+            }
+            return { message: 'User updated', user };
+        } catch (error) {
+            return { message: 'Error updating user', error: (error as Error).message };
         }
-        const updatedUser = {
-            ...users[userIndex],
-            ...userData,
-        };
-        users[userIndex] = updatedUser;
-        writeUsersToFile(users);
-        return { message: 'User updated', user: updatedUser };
     }
 
     @Delete('/users/:id')
-    delete(@Param('id') id: number) {
-        const users = readUsersFromFile();
-        const userIndex = users.findIndex((u) => u.id === id);
-        if (userIndex === -1) {
-            return { message: `User with ID ${id} not found` };
+    async delete(@Param('id') id: string) {
+        try {
+            const user = await this.userService.findOne(id);
+            if (!user) {
+                return { message: `User with ID ${id} not found` };
+            }
+            await this.userService.delete(id);
+            return { message: 'User deleted' };
+        } catch (error) {
+            return { message: 'Error deleting user', error: (error as Error).message };
         }
-        users.splice(userIndex, 1);
-        writeUsersToFile(users);
-        return { message: 'User deleted' };
     }
 }
